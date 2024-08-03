@@ -1,7 +1,18 @@
 # RASKUB
 
 라즈베리 파이를 활용하여 쿠버네티스 클러스터 구축해보기  
-**RAS**pberrypi **KUB**ernetes &rarr; RASKUB
+**RAS**pberrypi **KUB**ernetes &rarr; RASKUB  
+
+# 목차
+[0. 배경](#0-배경)  
+[1. 하드웨어 구성](#1-하드웨어-구성)  
+[2. k3s 설치 및 클러스터 세팅](#2-k3s-설치-및-클러스터-세팅)  
+[3. Master Node에 helm 설치](#3-master-node에-helm-설치)  
+[4. kubernetes dashboard 구성](#4-kubernetes-dashboard-구성)  
+[5. plex media server 구성](#5-plex-media-server-구성)  
+[6. ArgoCD 구성](#6-argocd-구성)  
+[7. hello-world 어플리케이션 배포해보기](#7-hello-world-어플리케이션-배포해보기)  
+
 
 # 0. 배경
 * 3대의 라즈베리 파이를 다음 용도로 활용 중이었다.
@@ -72,6 +83,20 @@ flowchart LR
   SWITCH -.- |"172.30.1.32\n172.30.1.22"| RPI52
   ME <-.-> ROUTER
 ```
-
+  
 ### 결과물
-<img src="./images/hardware/cluster.png" style="display: block; margin: 0 auto" width="60%" title="결과물">
+<img src="./images/hardware/cluster.png" style="display: block; margin: 0 auto" width="60%" title="결과물">  
+  
+     
+# 2. k3s 설치 및 클러스터 세팅
+
+
+# 3. Master Node에 helm 설치
+
+# 4. kubernetes dashboard 구성
+
+# 5. plex media server 구성
+
+# 6. ArgoCD 구성
+
+# 7. hello-world 어플리케이션 배포해보기
