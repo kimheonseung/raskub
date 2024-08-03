@@ -1,6 +1,6 @@
 # RASKUB
 
-라즈베리 파이를 활용하여 쿠버네티스 클러스터 구축해보기
+라즈베리 파이를 활용하여 쿠버네티스 클러스터 구축해보기  
 **RAS**pberrypi **KUB**ernetes &rarr; RASKUB
 
 # 0. 배경
