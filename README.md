@@ -170,7 +170,7 @@ flowchart LR
   * k3s와 helm이 사용하는 설정파일 문제
     |  |k3s|helm|
     |--|---|----|
-    |참조하는 설정파일|/etc/rancher/k3s/k3s.yaml|$HOME/.kube/config|
+    |참조 설정|/etc/rancher/k3s/k3s.yaml|$HOME/.kube/config|
     * 사용자 권한으로 실행하는 경우
       * k3s이 참조하는 설정 파일은 읽기 권한이 없음
       * group-readable, world-readable 설정하면 보안 취약
@@ -197,10 +197,306 @@ flowchart LR
       ```
 
 # 4. kubernetes dashboard 구성
-Wrting...
+### Kubernetes Dashboard 설치
+* [Kubernetes Dashboard](https://github.com/kubernetes/dashboard)
+  ```bash
+  # Add kubernetes-dashboard repository
+  $ helm repo add kubernetes-dashboard https://kubernetes.github.io/dashboard/
+  # Deploy a Helm Release named "kubernetes-dashboard" using the kubernetes-dashboard chart
+  $ helm upgrade --install kubernetes-dashboard kubernetes-dashboard/kubernetes-dashboard --create-namespace --namespace kubernetes-dashboard
+  Release "kubernetes-dashboard" does not exist. Installing it now.
+  NAME: kubernetes-dashboard
+  LAST DEPLOYED: Sat Jul  6 14:05:51 2024
+  NAMESPACE: kubernetes-dashboard
+  STATUS: deployed
+  REVISION: 1
+  TEST SUITE: None
+  NOTES:
+  *************************************************************************************************
+  *** PLEASE BE PATIENT: Kubernetes Dashboard may need a few minutes to get up and become ready ***
+  *************************************************************************************************
+  
+  Congratulations! You have just installed Kubernetes Dashboard in your cluster.
+  
+  To access Dashboard run:
+    kubectl -n kubernetes-dashboard port-forward svc/kubernetes-dashboard-kong-proxy 8443:443
+  
+  NOTE: In case port-forward command does not work, make sure that kong service name is correct.
+        Check the services in Kubernetes Dashboard namespace using:
+          kubectl -n kubernetes-dashboard get svc
+  
+  Dashboard will be available at:
+    https://localhost:8443
+  ```
+* 배포 확인
+  ```bash
+  $ kubectl -n kubernetes-dashboard get svc
+  NAME                                   TYPE        CLUSTER-IP      EXTERNAL-IP   PORT(S)                         AGE
+  kubernetes-dashboard-api               ClusterIP   10.43.96.66     <none>        8000/TCP                        127m
+  kubernetes-dashboard-auth              ClusterIP   10.43.155.232   <none>        8000/TCP                        127m
+  kubernetes-dashboard-kong-manager      NodePort    10.43.93.22     <none>        8002:32080/TCP,8445:32408/TCP   127m
+  kubernetes-dashboard-kong-proxy        ClusterIP   10.43.188.188   <none>        443/TCP                         127m
+  kubernetes-dashboard-metrics-scraper   ClusterIP   10.43.40.83     <none>        8000/TCP                        127m
+  kubernetes-dashboard-web               ClusterIP   10.43.65.37     <none>        8000/TCP                        127m
+  ```
+
+### Kubernetes Dashboard NodePort로 변경
+* Kubernetes Dashboard는 기본적으로 ClusterIP로 배포된다.
+* 외부에서 접근할 수 있도록 NodePort로 변경하고 HTTP 연결을 허용해본다.
+
+* Kubernetes Dashboard는 자체적으로 kong-proxy를 사용하고 있어서, 이쪽 설정을 변경해줘야 한다.
+  ```yaml
+  # kong-values.yaml
+  kong:
+    proxy:
+      type: NodePort
+    http:
+      enabled: true
+  ```
+  ```bash
+  # 위 설정값으로 helm 갱신
+  $ helm upgrade kubernetes-dashboard kubernetes-dashboard/kubernetes-dashboard -f kong-values.yaml -n kubernetes-dashboard
+  Release "kubernetes-dashboard" has been upgraded. Happy Helming!
+  NAME: kubernetes-dashboard
+  LAST DEPLOYED: Sun Jul  7 10:51:34 2024
+  NAMESPACE: kubernetes-dashboard
+  STATUS: deployed
+  REVISION: 2
+  TEST SUITE: None
+  NOTES:
+  *************************************************************************************************
+  *** PLEASE BE PATIENT: Kubernetes Dashboard may need a few minutes to get up and become ready ***
+  *************************************************************************************************
+  
+  Congratulations! You have just installed Kubernetes Dashboard in your cluster.
+  
+  To access Dashboard run:
+    kubectl -n kubernetes-dashboard port-forward svc/kubernetes-dashboard-kong-proxy 8443:443
+  
+  NOTE: In case port-forward command does not work, make sure that kong service name is correct.
+        Check the services in Kubernetes Dashboard namespace using:
+          kubectl -n kubernetes-dashboard get svc
+  
+  Dashboard will be available at:
+    https://localhost:8443
+  
+  $ k get svc -n kubernetes-dashboard
+  NAME                                   TYPE        CLUSTER-IP      EXTERNAL-IP   PORT(S)                         AGE
+  kubernetes-dashboard-api               ClusterIP   10.43.96.66     <none>        8000/TCP                        20h
+  kubernetes-dashboard-auth              ClusterIP   10.43.155.232   <none>        8000/TCP                        20h
+  kubernetes-dashboard-kong-manager      NodePort    10.43.93.22     <none>        8002:32080/TCP,8445:32408/TCP   20h
+  kubernetes-dashboard-kong-proxy        NodePort    10.43.188.188   <none>        443:32414/TCP                   20h
+  kubernetes-dashboard-metrics-scraper   ClusterIP   10.43.40.83     <none>        8000/TCP                        20h
+  kubernetes-dashboard-web               ClusterIP   10.43.65.37     <none>        8000/TCP                        20h  
+  ```
+* helm 갱신 후 revision이 2가 되고, proxy 서비스가 NodePortfh 변경된 것을 확인할 수 있다.
+* 32414 포트로 https 접속하면 대시보드 접근이 가능하다.
+* 로그인 페이지가 나오는데, 관련 sa, crb 등을 생성해야 한다.
+  <img src="./images/kubernetes-dashboard/dashboard-login.png" style="display: block; margin: 0 auto" width="60%" title="로그인">
+  ```yaml
+  # users.yaml
+  apiVersion: v1
+  kind: ServiceAccount
+  metadata:
+    name: admin-user
+    namespace: kubernetes-dashboard
+  
+  ---
+  
+  apiVersion: rbac.authorization.k8s.io/v1
+  kind: ClusterRoleBinding
+  metadata:
+    name: admin-user
+  roleRef:
+    apiGroup: rbac.authorization.k8s.io
+    kind: ClusterRole
+    name: cluster-admin
+  subjects:
+  - kind: ServiceAccount
+    name: admin-user
+    namespace: kubernetes-dashboard
+  
+  ---
+  
+  apiVersion: v1
+  kind: Secret
+  metadata:
+    name: admin-user
+    namespace: kubernetes-dashboard
+    annotations:
+      kubernetes.io/service-account.name: "admin-user"
+  type: kubernetes.io/service-account-token
+  ```
+  ```bash
+  $ kubectl apply -f users.yaml
+  $ kubectl get secret admin-user -n kubernetes-dashboard -o jsonpath={".data.token"} | base64 -d
+  eyJhbGciOiJSUzI1NiIsImtpZCI6ImVBQk9LV2lFSEdpWi1aVE1RRjd5ZHpzTTdOcGxnY3ZLbUUyR1F0ejcxOE0ifQ.eyJpc3MiOiJrdWJlcm5ldGVzL3NlcnZpY2VhY2NvdW50Iiwia3ViZXJuZXRlcy5pby9zZXJ2aWNlYWNjb3VudC9uYW1lc3BhY2UiOiJrdWJlcm5ldGVzLWRhc2hib2FyZCIsImt1YmVybmV0ZXMuaW8vc2VydmljZWFjY291bnQvc2VjcmV0Lm5hbWUiOiJhZG1pbi11c2VyIiwia3ViZXJuZXRlcy5pby9zZXJ2aWNlYWNjb3VudC9zZXJ2aWNlLWFjY291bnQubmFtZSI6ImFkbWluLXVzZXIiLCJrdWJlcm5ldGVzLmlvL3NlcnZpY2VhY2NvdW50L3NlcnZpY2UtYWNjb3VudC51aWQiOiJhNDY0MmZhYy1jMTM2LTRlN2UtYmFiZi04OGMxMzI1M2E3ZTMiLCJzdWIiOiJzeXN0ZW06c2VydmljZWFjY291bnQ6a3ViZXJuZXRlcy1kYXNoYm9hcmQ6YWRtaW4tdXNlciJ9.gYHrFYJKrjBvlnIKZ3v2wfmsBBy0yxY5lrvR4zspiaj2pNsYxW2DdcXBWM5SC8Q_mkuWqPuOSg4lJstiMV09PNf5ukv9seGV_cnEUsTfijjsnZPXd7ubMCZtk5mx-bZ9jofxbgqc0iZnSqz6iYo3G2zrnliDi0BAlN_dSRZq435J1Lw7QOMDcovWxvLLODy1mdUC4bWVaAg_HtfaX81jqEyEcvVoIfBN5DyHGMDCKQseG_Tn3ebZ2GLh0U4hOG5fdplgaVoGRPine5cGtfLjnZuM0DBjyyfsAt_aH1X2lOmA_ydhQRVoWAL9PRATjeCnRBCP0vG-nmQeM4iY7_H5JA
+  
+  # 위 토큰으로 대시보드 접근하기
+  ```
+* 다음 방법으로 서비스를 하나 더 두어 대시보드를 NodePort로 노출이 가능하지만.. 
+    * 불필요한 서비스가 하나 더 생성되고
+    * proxy 서비스를 이용하지 않아 안티패턴 같다.
+  ```yaml
+  # kubernetes-dashboard-kong.yaml
+  apiVersion: v1
+  kind: Service
+  metadata:
+    name: kubernetes-dashboard-kong-nodeport
+    namespace: kubernetes-dashboard
+  spec:
+    ports:
+    - name: kong-proxy-tls
+      nodePort: 32001 # Your desired port
+      port: 443
+      protocol: TCP
+      targetPort: 8443
+    selector:
+      app.kubernetes.io/component: app
+      app.kubernetes.io/instance: kubernetes-dashboard
+      app.kubernetes.io/name: kong
+    type: NodePort
+  ```
 
 # 5. plex media server 구성
-Wrting...
+### PVC로 활용할 NFS 서버 구축
+* Plex에서 사용할 PVC를 위해 워커노드 중 한대를 NFS Server로 사용한다.
+* ```rpi51.local``` 서버를 NFS 서버로 설정해본다.
+  ```bash
+  # nfs-kernel-server 설치
+  $ sudo apt install nfs-kernel-server -y
+  
+  # 공유 디렉토리 생성
+  $ sudo mkdir -p /mnt/nfsshare
+  
+  # 권한 설정
+  # 공유 디렉토리의 소유자/그룹 설정
+  $ sudo chown -R rpi51:rpi51 /mnt/nfsshare
+  # 공유 디렉토리 하위의 모든 디렉토리에 755 권한 부여
+  $ sudo find /mnt/nfsshare/ -type d -exec chmod 755 {} \;
+  # 공유 디렉토리 하위의 모든 파일에 644 권한 부여
+  $ sudo find /mnt/nfsshare/ -type f -exec chmod 644 {} \;
+  
+  # 현 사용자의 uid, gid 조회
+  $ id rpi51
+  uid=1000(rpi51) gid=1000(rpi51) ...
+  
+  # NFS 접근 관련 파일, 디렉토리 설정
+  $ sudo vi /etc/exports
+  # 아래 설정을 입력 - 
+  /mnt/nfsshare *(rw,all_squash,insecure,async,no_subtree_check,anonuid=1000,anongid=1000)
+  # 저장~
+  
+  # 새로운 폴더를 공유로 추가하였으므로 exportfs 명령어를 통해 갱신한다.
+  $ sudo exportfs -ra
+  # nfs-kernel-server 리스타트
+  $ sudo systemctl restart nfs-kernel-server
+  ```
+### Plex Media Server arm64용 이미지 빌드
+* 공식 이미지 레지스트리에서는 linux/amd64 이미지만 제공한다.
+* 라즈베리파이는 arm64 아키텍처용 이미지가 필요하다.
+* 개인 이미지 레지스트리에 일단 하나 생성해둔다.
+  ```bash
+  $ docker pull gpoleze/pms-docker:arm64v8-2022-09-25
+  $ docker login
+  $ docker tag gpoleze/pms-docker:arm64v8-2022-09-25 khs920210/pms-docker:arm64v8-2022-09-25
+  $ docker push khs920210/pms-docker:arm64v8-2022-09-25
+  ```
+
+### Plex Media Server 배포
+**PV 및 PVC 생성**
+* 하나의 파드만 사용할 예정이라 ```storage = capacity```로 설정한다.
+  ```yaml
+  # nfs-pv.yaml
+  apiVersion: v1
+  kind: PersistentVolume
+  metadata:
+    name: nfs-pv
+    labels:
+      type: nfs
+  spec:
+    capacity:
+      storage: 100Gi
+    accessModes:
+      - ReadWriteMany
+    nfs:
+      server: rpi51.local
+      path: /mnt/nfsshare
+  
+  # nfs-pvc.yaml
+  apiVersion: v1
+  kind: PersistentVolumeClaim
+  metadata:
+    name: nfs-pvc
+  spec:
+    storageClassName: ""
+    accessModes:
+      - ReadWriteMany
+    resources:
+      requests:
+        storage: 100Gi
+    selector:
+      matchLabels:
+        type: nfs
+  ```
+  ```bash
+  $ kubectl apply nfs-pv.yaml
+  $ kubectl apply nfs-pvc.yaml
+  ```
+  ```bash
+  # 예시 설정값들 확인
+  $ helm show values plex/plex-media-server > values.yaml
+  ```
+  ```yaml
+  # values.yaml
+  # 이미지 지정
+  image:
+    registry: index.docker.io
+    repository: khs920210/pms-docker
+    # If unset use "latest"
+    tag: "arm64v8-2022-09-25"
+    sha: ""
+    pullPolicy: IfNotPresent
+  
+  # pvc를 연동
+  extraVolumeMounts:
+    - name: nfs-volume
+      mountPath: /data/nfs
+      readOnly: true
+  extraVolumes:
+    - name: nfs-volume
+      persistentVolumeClaim:
+        claimName: nfs-pvc
+        
+  # NodePort로 오픈
+  service:
+    type: NodePort
+    port: 32400
+  
+    # Port to use when type of service is "NodePort" (32400 by default)
+    # nodePort: 32400
+  
+    # optional extra annotations to add to the service resource
+    annotations: {}
+  ```
+  ```bash
+  # 위 설정값으로 배포
+  $ helm repo add plex https://raw.githubusercontent.com/plexinc/pms-docker/gh-pages
+  $ helm upgrade --install plex plex/plex-media-server --values values.yaml
+  ```
+
+### Plex 초기 설정 진행
+* 반드시 배포된 호스트의 IP로 들어가야 초기 설정을 진행할 수 있음
+  * 호스트 네임으로 접근시 설정이 불가능
+  * 파드가 배포된 워커노드의 호스트 IP로 접근하기
+  * 배포된 파드의 호스트 워커노드 조회해보기
+```bash
+$ kubectl get pods -o wide
+NAME                       READY   STATUS    RESTARTS   AGE     IP           NODE    NOMINATED NODE   READINESS GATES
+plex-plex-media-server-0   1/1     Running   0          9m56s   10.42.2.58   rpi52   <none>           <none>
+
+# rpi52의 호스트IP로 접근하기
+```
 
 # 6. ArgoCD 구성
 Wrting...
