@@ -94,6 +94,7 @@ flowchart LR
   * 컨테이너별 리소스 사용 배분을 위해 설정한다.
     ```bash
     $ sudo vi /boot/firmware/cmdline.txt
+    ... cgroup_enable=cpuset cgroup_memory=1 cgroup_enable=memory
     ```
 * swap off
   * 디스크 I/O 성능 저하 발생
