@@ -12,3 +12,4 @@
 [5. plex media server 구성](./Chapter5.md)  
 [6. ArgoCD 구성](./Chapter6.md)  
 [7. hello-world 어플리케이션 배포해보기](./Chapter7.md)  
+[8. PostgreSQL 배포해보기 ](./Chapter8.md)  
