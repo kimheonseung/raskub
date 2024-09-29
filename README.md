@@ -13,3 +13,4 @@
 [6. ArgoCD 구성](./Chapter6.md)  
 [7. hello-world 어플리케이션 배포해보기](./Chapter7.md)  
 [8. PostgreSQL 배포해보기 ](./Chapter8.md)  
+[9. ConfigMap, Secret으로 Spring 어플리케이션 설정 주입]
