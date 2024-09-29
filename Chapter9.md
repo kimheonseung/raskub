@@ -251,3 +251,6 @@ class HelloWorldController(
 
 ### 확인
 <img src="./images/spring-cloud-kubernetes/message.png" style="display: block; margin: 0 auto" width="100%" title="메시지 확인">
+
+### Git Repo
+https://github.com/kimheonseung/hello-world
